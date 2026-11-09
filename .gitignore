@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Input data (large / third-party: add locally, do not commit)
+*.tif
+Landuse_Masterplan.*
+Landuse_Masterplan/
+dem5m.tif
+
+# Generated outputs (regenerate with the scripts)
+out/
+*.rpt
+*.out

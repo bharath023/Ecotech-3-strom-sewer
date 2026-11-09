@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ecotech III – storm sewer live map</title>
+<style>
+:root{--bg:#f6f7f9;--panel:#fff;--fg:#1d232b;--muted:#5d6875;--line:#d9dee5;--accent:#1f6fb4;--bad:#c0392b;--ok:#2e8b57;--warn:#d98a00;
+--sub0:#e8ecef;--node:#fff;--casing:#2b3440;}
+@media (prefers-color-scheme:dark){:root{--bg:#14181d;--panel:#1d232b;--fg:#e8ecf1;--muted:#98a3b0;--line:#33404d;--accent:#5aa9e6;--bad:#ff6b5c;--ok:#4cc38a;--warn:#f0b429;--sub0:#2a323b;--node:#1d232b;--casing:#0b0e12;}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+header{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+header h1{font-size:15px;margin:0;font-weight:650}
+header .sp{flex:1}
+select,button,input[type=range]{font:inherit;color:var(--fg)}
+select,button{background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:5px 10px;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;min-width:78px}
+label.chk{display:inline-flex;align-items:center;gap:5px;color:var(--muted);cursor:pointer}
+main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 340px;min-height:0}
+@media (max-width:900px){main{grid-template-columns:1fr;grid-template-rows:60vh auto}}
+#mapwrap{position:relative;min-height:320px;min-width:0}
+canvas#map{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+#hud{position:absolute;left:12px;top:10px;background:color-mix(in srgb,var(--panel) 88%,transparent);border:1px solid var(--line);border-radius:9px;padding:6px 12px;pointer-events:none}
+#clock{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+#hud small{color:var(--muted)}
+#legend{position:absolute;left:12px;bottom:12px;background:color-mix(in srgb,var(--panel) 90%,transparent);border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-size:12px;max-width:230px}
+#legend .bar{height:10px;border-radius:5px;margin:4px 0 2px;background:linear-gradient(90deg,hsl(210,70%,55%),hsl(140,60%,45%),hsl(55,85%,50%),hsl(0,75%,50%))}
+#legend .row{display:flex;justify-content:space-between;color:var(--muted)}
+#legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+#attr{position:absolute;right:8px;bottom:6px;font-size:10.5px;color:#fff;background:rgba(0,0,0,.55);padding:2px 7px;border-radius:5px;pointer-events:none}
+#tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:12px;box-shadow:0 4px 18px rgba(0,0,0,.25);display:none;max-width:260px;white-space:pre-line;z-index:5}
+aside{border-left:1px solid var(--line);background:var(--panel);overflow:auto;padding:12px 14px;min-width:0}
+@media (max-width:900px){aside{border-left:0;border-top:1px solid var(--line)}}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.kpi{border:1px solid var(--line);border-radius:9px;padding:7px 10px}
+.kpi b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.kpi span{color:var(--muted);font-size:11.5px}
+.kpi.bad b{color:var(--bad)}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 0 6px}
+canvas#chart{width:100%;height:170px;display:block;border:1px solid var(--line);border-radius:9px;cursor:pointer;touch-action:none}
+.ctl{display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid var(--line);background:var(--panel)}
+.ctl input[type=range]{flex:1;accent-color:var(--accent)}
+.note{color:var(--muted);font-size:11.5px;margin-top:12px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+td,th{padding:3px 4px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+td:first-child,th:first-child{text-align:left}
+</style>
+</head>
+<body>
+<header>
+  <h1>Ecotech III – storm sewer live map</h1>
+  <select id="evsel" aria-label="Storm event"></select>
+  <select id="basesel" aria-label="Base map">
+    <option value="sat" selected>Base map: satellite (Esri)</option>
+    <option value="osm">Base map: OpenStreetMap</option>
+    <option value="none">Base map: none</option>
+  </select>
+  <select id="bgsel" aria-label="Background layer">
+    <option value="runoff">Subcatchments: runoff</option>
+    <option value="none">Subcatchments: plain</option>
+  </select>
+  <label class="chk"><input type="checkbox" id="lab"> labels</label>
+  <label class="chk"><input type="checkbox" id="arrows" checked> flow arrows</label>
+  <span class="sp"></span>
+  <button id="reset">Reset view</button>
+</header>
+<main>
+  <div id="mapwrap">
+    <canvas id="map"></canvas>
+    <div id="hud"><div id="clock">00:00</div><small id="hudsub"></small></div>
+    <div id="legend">
+      <b>Pipe flow ÷ full-flow capacity</b>
+      <div class="bar"></div>
+      <div class="row"><span>0</span><span>0.5</span><span>1.0</span><span>&gt;1.2</span></div>
+      <div style="margin-top:6px"><i style="background:#fff;border:2px solid #2b3440"></i>node dry/low
+        <br><i style="background:#2c7fb8"></i>node filling (% of rim depth)
+        <br><i style="background:#c0392b"></i>node at rim / flooding
+        <br><span style="color:var(--muted)">▼ outfall</span></div>
+    </div>
+    <div id="attr"></div>
+    <div id="tip"></div>
+  </div>
+  <aside>
+    <div class="kpis">
+      <div class="kpi"><b id="k_rain">–</b><span>rainfall (mm/h)</span></div>
+      <div class="kpi"><b id="k_out">–</b><span>outfall flow (m³/s)</span></div>
+      <div class="kpi" id="kf"><b id="k_flood">–</b><span>flooding now (m³/s)</span></div>
+      <div class="kpi" id="kv"><b id="k_vol">–</b><span>flood volume so far (m³)</span></div>
+      <div class="kpi"><b id="k_full">–</b><span>pipes running full</span></div>
+      <div class="kpi"><b id="k_rim">–</b><span>nodes at rim</span></div>
+    </div>
+    <h2>Rainfall · outfall flow · flooding</h2>
+    <canvas id="chart"></canvas>
+    <div id="evsum" class="note"></div>
+    <h2>Event peaks</h2>
+    <table id="peaks"></table>
+    <p class="note" id="note"></p>
+    <p class="note">Mouse wheel = zoom · drag = pan · hover a node or pipe for details · click the chart to jump in time.</p>
+  </aside>
+</main>
+<div class="ctl">
+  <button id="play" class="primary">▶ Play</button>
+  <input type="range" id="slider" min="0" max="100" value="0" aria-label="Time">
+  <label class="chk">speed
+    <select id="speed"><option value="2">slow</option><option value="6" selected>normal</option><option value="14">fast</option><option value="30">very fast</option></select>
+  </label>
+</div>
+<script id="data" type="application/json">/*__DATA__*/</script>
+<script>
+(function(){
+"use strict";
+const rawData = document.getElementById("data").textContent.trim();
+if (rawData.indexOf("__DATA__") !== -1) {
+  document.body.innerHTML = '<div style="max-width:560px;margin:12vh auto;padding:20px;font:16px/1.5 system-ui;border:1px solid #d9dee5;border-radius:12px"><h2 style="margin-top:0">This is the blank template</h2><p>It has no simulation data yet. Open <b>ecotech3_live_map.html</b> instead &mdash; it is created in the <b>out</b> folder when you run <code>py make_live_map.py</code>.</p></div>';
+  return;
+}
+const D = JSON.parse(rawData);
+const G = D.geo, E = D.events, SM = D.sample_min;
+const $ = id => document.getElementById(id);
+const cv = $("map"), ctx = cv.getContext("2d"), ch = $("chart"), cx = ch.getContext("2d");
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let ev = E[0], ti = 0, playing = false, speed = 6, acc = 0, lastT = 0;
+let S = 1, OX = 0, OY = 0, W = 0, H = 0, DPR = 1, hover = null, drag = null;
+const maxQfull = Math.max.apply(null, G.links.map(l => l.qfull));
+const nfmt = (v, d) => (v === null || isNaN(v)) ? "–" : v.toFixed(d);
+
+// ---- event select
+E.forEach((e, i) => { const o = document.createElement("option"); o.value = i; o.textContent = e.label; $("evsel").appendChild(o); });
+$("note").textContent = D.note;
+
+// ---- per-event precomputation
+function prep(e) {
+  if (e._p) return;
+  const dt = SM * 60;
+  let cum = 0; e.cumVol = e.flood.map(f => (cum += f * dt, cum));
+  e.maxRain = Math.max(1, Math.max.apply(null, e.rain));
+  e.maxQ = Math.max(1, Math.max.apply(null, e.outq));
+  e.maxF = Math.max(0.01, Math.max.apply(null, e.flood));
+  e.maxRun = 1e-9;
+  e.sr.forEach(row => row.forEach((q, j) => { const mm = q / (G.subs[j].ha * 1e4) * 3.6e6; if (mm > e.maxRun) e.maxRun = mm; }));
+  e.fullEver = new Set(); e.rimEver = new Set();
+  e.ld.forEach(row => row.forEach((d, j) => { if (d / G.links[j].d >= 0.98) e.fullEver.add(j); }));
+  e.nd.forEach(row => row.forEach((d, i) => { if (G.nodes[i].rim > 0 && d / G.nodes[i].rim >= 0.999 && G.nodes[i].id !== "OUT") e.rimEver.add(i); }));
+  e._p = 1;
+}
+
+// ---- view
+function fit() {
+  const r = cv.getBoundingClientRect(); DPR = window.devicePixelRatio || 1;
+  W = r.width; H = r.height; cv.width = W * DPR; cv.height = H * DPR;
+  const pad = 34; S = Math.min((W - 2 * pad) / G.w, (H - 2 * pad) / G.h);
+  OX = (W - G.w * S) / 2; OY = (H - G.h * S) / 2;
+}
+const px = p => [OX + p[0] * S, OY + (G.h - p[1]) * S];
+
+// ---- colours
+function pipeColour(r) { const t = Math.min(r / 1.2, 1); return "hsl(" + (210 - 210 * Math.pow(t, 0.85)) + "," + (70 + 10 * t) + "%," + (55 - 8 * t) + "%)"; }
+function runColour(mm) { const t = Math.min(mm / ev.maxRun, 1); return "rgba(31,111,180," + (0.05 + 0.5 * Math.sqrt(t)) + ")"; }
+
+// ---- drawing
+// ---- base map tiles (web mercator XYZ), drawn through an exact affine transform
+const M = G.merc, detM = M.a * M.d - M.b * M.c;
+const toLocal = (X, Y) => { const dx = X - M.e, dy = Y - M.f; return [(M.d * dx - M.c * dy) / detM, (-M.b * dx + M.a * dy) / detM]; };
+const TILE_URL = {
+  sat: (z, x, y) => "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/" + z + "/" + y + "/" + x,
+  osm: (z, x, y) => "https://tile.openstreetmap.org/" + z + "/" + x + "/" + y + ".png" };
+const ATTR = { sat: "Imagery © Esri, Maxar, Earthstar Geographics", osm: "© OpenStreetMap contributors", none: "" };
+const tileCache = new Map(); let anyTile = false;
+function getTile(kind, z, x, y) {
+  const k = kind + "/" + z + "/" + x + "/" + y; let img = tileCache.get(k);
+  if (!img) { img = new Image(); img.src = TILE_URL[kind](z, x, y); tileCache.set(k, img);
+    if (tileCache.size > 700) tileCache.delete(tileCache.keys().next().value); }
+  return img;
+}
+function drawTiles(kind) {
+  const lat = G.lat * Math.PI / 180, ORG = 20037508.34;
+  const z = Math.max(10, Math.min(19, Math.round(Math.log2(156543.03 * Math.cos(lat) * S) + 0.3)));
+  const size = 2 * ORG / Math.pow(2, z);
+  const cs = [[0, 0], [W, 0], [0, H], [W, H]].map(q => { const x = (q[0] - OX) / S, y = G.h - (q[1] - OY) / S; return [M.a * x + M.c * y + M.e, M.b * x + M.d * y + M.f]; });
+  const xs = cs.map(c => c[0]), ys = cs.map(c => c[1]);
+  const tx0 = Math.floor((Math.min.apply(null, xs) + ORG) / size), tx1 = Math.floor((Math.max.apply(null, xs) + ORG) / size);
+  const ty0 = Math.floor((ORG - Math.max.apply(null, ys)) / size), ty1 = Math.floor((ORG - Math.min.apply(null, ys)) / size);
+  if ((tx1 - tx0 + 1) * (ty1 - ty0 + 1) > 120) return;
+  ctx.save(); let drawn = false;
+  for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+    const img = getTile(kind, z, tx, ty); if (!img.complete || !img.naturalWidth) continue;
+    const X0 = -ORG + tx * size, Y0 = ORG - ty * size, r = size / 256;
+    const P = (u, v) => px(toLocal(X0 + u * r, Y0 - v * r));
+    const p0 = P(0, 0), p1 = P(256, 0), p2 = P(0, 256);
+    ctx.setTransform(DPR * (p1[0] - p0[0]) / 256, DPR * (p1[1] - p0[1]) / 256, DPR * (p2[0] - p0[0]) / 256, DPR * (p2[1] - p0[1]) / 256, DPR * p0[0], DPR * p0[1]);
+    ctx.drawImage(img, -0.4, -0.4, 256.8, 256.8); drawn = true;
+  }
+  ctx.restore(); anyTile = drawn;
+}
+function draw() {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.clearRect(0, 0, W, H);
+  const base = $("basesel").value; $("attr").textContent = ATTR[base]; $("attr").style.display = base === "none" ? "none" : "block";
+  if (base !== "none") drawTiles(base); else anyTile = false;
+  const bg = $("bgsel").value, lab = $("lab").checked, arrows = $("arrows").checked;
+  const sr = ev.sr[ti], lq = ev.lq[ti], ld = ev.ld[ti], nd = ev.nd[ti], nf = ev.nf[ti];
+  // subcatchments
+  G.subs.forEach((s, j) => {
+    ctx.beginPath(); s.ring.forEach((p, k) => { const q = px(p); k ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }); ctx.closePath();
+    ctx.fillStyle = anyTile ? "rgba(255,255,255,0.12)" : css("--sub0"); ctx.fill();
+    if (bg === "runoff") { ctx.fillStyle = runColour(sr[j] / (s.ha * 1e4) * 3.6e6); ctx.fill(); }
+    ctx.strokeStyle = css("--line"); ctx.lineWidth = 1; ctx.stroke();
+    if (lab) { let cxs = 0, cys = 0; s.ring.forEach(p => { const q = px(p); cxs += q[0]; cys += q[1]; }); ctx.fillStyle = css("--muted"); ctx.font = "10px system-ui"; ctx.textAlign = "center"; ctx.fillText(s.id, cxs / s.ring.length, cys / s.ring.length + 14); }
+  });
+  // pipes
+  G.links.forEach((l, j) => {
+    const a = px(G.nodes[l.a].p), b = px(G.nodes[l.b].p), q = lq[j];
+    const w = 2.2 + 6 * Math.sqrt(l.qfull / maxQfull), r = Math.abs(q) / l.qfull;
+    ctx.lineCap = "round"; ctx.strokeStyle = css("--casing"); ctx.lineWidth = w + 2; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    ctx.strokeStyle = pipeColour(r); ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    if (arrows && Math.abs(q) > 0.02) {
+      const dir = q >= 0 ? 1 : -1, mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, ang = Math.atan2(b[1] - a[1], b[0] - a[0]) + (dir < 0 ? Math.PI : 0), z = 3 + w * 0.55;
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.moveTo(mx + Math.cos(ang) * z, my + Math.sin(ang) * z);
+      ctx.lineTo(mx + Math.cos(ang + 2.5) * z, my + Math.sin(ang + 2.5) * z); ctx.lineTo(mx + Math.cos(ang - 2.5) * z, my + Math.sin(ang - 2.5) * z); ctx.closePath(); ctx.fill();
+    }
+    if (lab && S > 0.12) { ctx.fillStyle = css("--fg"); ctx.font = "9.5px system-ui"; ctx.textAlign = "center"; ctx.fillText(l.id, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2 - w - 3); }
+  });
+  // nodes
+  G.nodes.forEach((n, i) => {
+    const p = px(n.p);
+    if (n.id === "OUT") {
+      ctx.fillStyle = css("--fg"); ctx.beginPath(); ctx.moveTo(p[0], p[1] + 9); ctx.lineTo(p[0] - 9, p[1] - 7); ctx.lineTo(p[0] + 9, p[1] - 7); ctx.closePath(); ctx.fill();
+      ctx.font = "bold 11px system-ui"; ctx.textAlign = "left"; ctx.fillText("OUTFALL " + nfmt(ev.outq[ti], 1) + " m³/s", p[0] + 13, p[1] + 3); return;
+    }
+    const f = n.rim > 0 ? Math.min(nd[i] / n.rim, 1) : 0, flooding = nf[i] > 0.0005 || f >= 0.999;
+    let r = 3.6 + (nf[i] > 0 ? Math.min(14, 3 + 5 * Math.sqrt(nf[i])) : 0);
+    if (flooding) { ctx.fillStyle = "rgba(192,57,43,.28)"; ctx.beginPath(); ctx.arc(p[0], p[1], r + 5 + 3 * Math.sin(performance.now() / 220), 0, 6.283); ctx.fill(); }
+    ctx.fillStyle = flooding ? css("--bad") : (f > 0.02 ? "hsl(205," + (50 + 40 * f) + "%," + (70 - 38 * f) + "%)" : css("--node"));
+    ctx.strokeStyle = css("--casing"); ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, 6.283); ctx.fill(); ctx.stroke();
+    if (lab) { ctx.fillStyle = css("--fg"); ctx.font = "9.5px system-ui"; ctx.textAlign = "left"; ctx.fillText(n.id, p[0] + r + 2, p[1] - r); }
+  });
+  // hover ring
+  if (hover) { const p = hover.p; ctx.strokeStyle = css("--accent"); ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(p[0], p[1], 11, 0, 6.283); ctx.stroke(); }
+  // HUD
+  const m = ev.t[ti], hh = String(Math.floor(m / 60)).padStart(2, "0"), mm = String(Math.round(m % 60)).padStart(2, "0");
+  $("clock").textContent = hh + ":" + mm; $("hudsub").textContent = ev.label;
+  kpis(); chart();
+}
+
+function kpis() {
+  $("k_rain").textContent = nfmt(ev.rain[ti], 0);
+  $("k_out").textContent = nfmt(ev.outq[ti], 1);
+  $("k_flood").textContent = nfmt(ev.flood[ti], 2);
+  $("k_vol").textContent = Math.round(ev.cumVol[ti]).toLocaleString();
+  $("kf").classList.toggle("bad", ev.flood[ti] > 0.0005); $("kv").classList.toggle("bad", ev.cumVol[ti] > 0.5);
+  let full = 0, rim = 0;
+  ev.ld[ti].forEach((d, j) => { if (d / G.links[j].d >= 0.98) full++; });
+  ev.nd[ti].forEach((d, i) => { if (G.nodes[i].id !== "OUT" && G.nodes[i].rim > 0 && d / G.nodes[i].rim >= 0.999) rim++; });
+  $("k_full").textContent = full + " / " + G.links.length; $("k_rim").textContent = rim;
+}
+
+function chart() {
+  const r = ch.getBoundingClientRect(), w = r.width, h = r.height, d = window.devicePixelRatio || 1;
+  if (ch.width !== Math.round(w * d)) { ch.width = Math.round(w * d); ch.height = Math.round(h * d); }
+  cx.setTransform(d, 0, 0, d, 0, 0); cx.clearRect(0, 0, w, h);
+  const n = ev.t.length, X = i => 6 + (w - 12) * i / (n - 1), top = 6, bot = h - 16;
+  cx.fillStyle = css("--muted"); cx.globalAlpha = .55; const bw = Math.max(1, (w - 12) / n - 1);
+  ev.rain.forEach((v, i) => { const bh = (bot - top) * 0.45 * v / ev.maxRain; cx.fillRect(X(i) - bw / 2, top, bw, bh); }); cx.globalAlpha = 1;
+  cx.beginPath(); ev.flood.forEach((v, i) => { const y = bot - (bot - top) * 0.9 * v / ev.maxF; i ? cx.lineTo(X(i), y) : cx.moveTo(X(i), y); });
+  cx.strokeStyle = css("--bad"); cx.lineWidth = 1.6; cx.stroke();
+  cx.beginPath(); ev.outq.forEach((v, i) => { const y = bot - (bot - top) * 0.9 * v / ev.maxQ; i ? cx.lineTo(X(i), y) : cx.moveTo(X(i), y); });
+  cx.strokeStyle = css("--accent"); cx.lineWidth = 2.2; cx.stroke();
+  cx.strokeStyle = css("--fg"); cx.lineWidth = 1; cx.beginPath(); cx.moveTo(X(ti), 0); cx.lineTo(X(ti), h - 14); cx.stroke();
+  cx.fillStyle = css("--muted"); cx.font = "10px system-ui"; cx.textAlign = "left"; cx.fillText("0", 6, h - 3); cx.textAlign = "right"; cx.fillText(Math.round(ev.t[n - 1] / 60 * 10) / 10 + " h", w - 6, h - 3);
+  cx.textAlign = "left"; cx.fillStyle = css("--muted"); cx.fillText("rain (grey, from top)", 8, 14 + 0);
+  cx.fillStyle = css("--accent"); cx.fillText("outfall flow", 8, 26); cx.fillStyle = css("--bad"); cx.fillText("flooding", 8, 38);
+}
+
+function summary() {
+  prep(ev);
+  const pk = (a) => Math.max.apply(null, a), tot = ev.cumVol[ev.cumVol.length - 1];
+  $("peaks").innerHTML = "<tr><th>Item</th><th>Value</th></tr>" +
+    "<tr><td>Peak rainfall (mm/h)</td><td>" + nfmt(pk(ev.rain), 0) + "</td></tr>" +
+    "<tr><td>Peak outfall flow (m³/s)</td><td>" + nfmt(pk(ev.outq), 1) + "</td></tr>" +
+    "<tr><td>Peak flooding rate (m³/s)</td><td>" + nfmt(pk(ev.flood), 2) + "</td></tr>" +
+    "<tr><td>Total flood volume (m³)</td><td>" + Math.round(tot).toLocaleString() + "</td></tr>" +
+    "<tr><td>Pipes that ran full</td><td>" + ev.fullEver.size + " / " + G.links.length + "</td></tr>" +
+    "<tr><td>Nodes that reached rim</td><td>" + ev.rimEver.size + "</td></tr>";
+  $("evsum").textContent = "Sampled every " + SM + " min over " + (ev.t[ev.t.length - 1] / 60).toFixed(1) + " h; SWMM 5.2 dynamic wave.";
+}
+
+function setEvent(i) { ev = E[i]; prep(ev); ti = 0; $("slider").max = ev.t.length - 1; $("slider").value = 0; summary(); draw(); }
+function setT(i) { ti = Math.max(0, Math.min(ev.t.length - 1, i)); $("slider").value = ti; draw(); }
+
+// ---- animation loop
+function loop(now) {
+  if (playing) {
+    if (lastT) acc += (now - lastT) / 1000 * speed;
+    while (acc >= 1) { acc -= 1; if (ti < ev.t.length - 1) ti++; else { playing = false; $("play").textContent = "↻ Replay"; } }
+    $("slider").value = ti;
+  }
+  lastT = now; draw(); requestAnimationFrame(loop);
+}
+
+// ---- interaction
+$("play").onclick = () => { if (!playing && ti >= ev.t.length - 1) ti = 0; playing = !playing; $("play").textContent = playing ? "❚❚ Pause" : "▶ Play"; };
+$("slider").oninput = e => { playing = false; $("play").textContent = "▶ Play"; setT(+e.target.value); };
+$("evsel").onchange = e => { playing = false; $("play").textContent = "▶ Play"; setEvent(+e.target.value); };
+$("speed").onchange = e => { speed = +e.target.value; };
+$("reset").onclick = () => { fit(); };
+["bgsel", "basesel", "lab", "arrows"].forEach(id => $(id).onchange = () => draw());
+window.addEventListener("resize", fit);
+cv.addEventListener("wheel", e => { e.preventDefault(); const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, k = Math.exp(-e.deltaY * 0.0015);
+  OX = mx - (mx - OX) * k; OY = my - (my - OY) * k; S *= k; }, { passive: false });
+cv.addEventListener("pointerdown", e => { drag = { x: e.clientX, y: e.clientY, ox: OX, oy: OY }; cv.setPointerCapture(e.pointerId); cv.style.cursor = "grabbing"; });
+cv.addEventListener("pointerup", () => { drag = null; cv.style.cursor = "grab"; });
+cv.addEventListener("pointermove", e => {
+  if (drag) { OX = drag.ox + e.clientX - drag.x; OY = drag.oy + e.clientY - drag.y; $("tip").style.display = "none"; return; }
+  const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top; let best = null, bd = 12;
+  G.nodes.forEach((n, i) => { const p = px(n.p), d = Math.hypot(p[0] - mx, p[1] - my); if (d < bd) { bd = d; best = { kind: "node", i: i, p: p }; } });
+  if (!best) { bd = 7; G.links.forEach((l, j) => { const a = px(G.nodes[l.a].p), b = px(G.nodes[l.b].p), dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy || 1;
+    let t = ((mx - a[0]) * dx + (my - a[1]) * dy) / L; t = Math.max(0, Math.min(1, t)); const d = Math.hypot(a[0] + t * dx - mx, a[1] + t * dy - my); if (d < bd) { bd = d; best = { kind: "link", i: j, p: [mx, my] }; } }); }
+  hover = best && best.kind === "node" ? best : null; const tip = $("tip");
+  if (!best) { tip.style.display = "none"; return; }
+  let txt;
+  if (best.kind === "node") { const n = G.nodes[best.i];
+    txt = n.id === "OUT" ? "OUTFALL\ninvert " + n.inv + " m\ninflow " + nfmt(ev.outq[ti], 2) + " m³/s" :
+      "Node " + n.id + "\nground " + n.gl + " m · invert " + n.inv + " m\nrim depth " + n.rim + " m\nwater depth " + nfmt(ev.nd[ti][best.i], 2) + " m\nflooding " + nfmt(ev.nf[ti][best.i], 3) + " m³/s"; }
+  else { const l = G.links[best.i], q = ev.lq[ti][best.i];
+    txt = "Pipe " + l.id + " (" + l.label + ")\nlength " + l.len + " m · slope " + l.slope + " ‰\nflow " + nfmt(q, 2) + " m³/s of " + l.qfull + " full\nfill " + nfmt(100 * ev.ld[ti][best.i] / l.d, 0) + " %\ninvert " + l.il[0] + " → " + l.il[1] + " m"; }
+  tip.textContent = txt; tip.style.display = "block"; const rr = $("mapwrap").getBoundingClientRect();
+  tip.style.left = Math.min(mx + 14, rr.width - 270) + "px"; tip.style.top = Math.min(my + 14, rr.height - 120) + "px";
+});
+cv.addEventListener("pointerleave", () => { hover = null; $("tip").style.display = "none"; });
+function chartSeek(e) { const r = ch.getBoundingClientRect(), f = (e.clientX - r.left - 6) / (r.width - 12); playing = false; $("play").textContent = "▶ Play"; setT(Math.round(f * (ev.t.length - 1))); }
+let cd = false; ch.addEventListener("pointerdown", e => { cd = true; ch.setPointerCapture(e.pointerId); chartSeek(e); });
+ch.addEventListener("pointermove", e => { if (cd) chartSeek(e); }); ch.addEventListener("pointerup", () => { cd = false; });
+
+fit(); setEvent(0); requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
