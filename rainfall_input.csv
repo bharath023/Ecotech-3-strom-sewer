@@ -1,0 +1,31 @@
+# RAINFALL INPUT - edit this file with your own IDF values (e.g. IMD / CPHEEO table for Delhi-NCR)
+# Columns: return_period_yr, duration_min, intensity_mm_h   (or use depth_mm instead of intensity_mm_h)
+# - Give at least two durations per return period; add as many return periods as you like.
+# - Intensities between your durations are interpolated (log-log); outside your range they are extrapolated.
+# - The scripts use DESIGN_RP (sizing) and CHECK_RP (flood check) from the top of ecotech3_design.py (5 and 50 by default).
+# - THE VALUES BELOW ARE PLACEHOLDERS (assumed CWC-scaled numbers, NOT official IMD data). Replace them.
+return_period_yr,duration_min,intensity_mm_h
+5,5,190.0
+5,10,130.2
+5,15,104.3
+5,30,71.5
+5,60,49.0
+5,120,34.2
+5,180,26.9
+5,360,16.3
+10,5,231.2
+10,10,158.4
+10,15,126.9
+10,30,87.0
+10,60,59.6
+10,120,41.6
+10,180,32.7
+10,360,19.9
+50,5,316.7
+50,10,217.0
+50,15,173.9
+50,30,119.1
+50,60,81.6
+50,120,57.0
+50,180,44.8
+50,360,27.2
